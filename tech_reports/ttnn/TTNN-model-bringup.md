@@ -16,9 +16,9 @@
   - [3. End to end model in TTNN](#3-end-to-end-model-in-ttnn)
     - [3.1 Create TTNN unit tests per module and per op](#31-create-ttnn-unit-tests-per-module-and-per-op)
     - [3.2 PCC](#32-pcc)
-    - [3.3 Optimization](#33-optimization)
+    - [3.3 Optimization per Op (Stage 1)](#33-optimization-per-op-stage-1)
   - [4. End to end model performance](#4-end-to-end-model-performance)
-    - [4.1 Performance sheet](#41-performance-sheet)
+    - [4.1 Optimization with Performance Sheet (Stage 2)](#41-optimization-with-performance-sheet-stage-2)
     - [4.2 Visualizer](#42-visualizer)
     - [4.3 Trace and 2cq](#43-trace-and-2cq)
   - [5. Conclusion](#5-conclusion)
@@ -32,78 +32,95 @@
 ## 2. New model bringup flow in TTNN
 
 ### 2.1 Recommended steps for model bringup
-  - The following diagram illustrates our recommended steps for a new model bring-up on TTNN.
+The following diagram illustrates our recommended steps for a new model bring-up on TTNN.
 ![New model bring-up flow](images/Flow.png)
-  - In the following sections we will dive deeper into each step with examples.
+
+In the following sections we will dive deeper into each step with examples.
 
 ### 2.2 Create a model Card
-  - The model card may be created as a github issue or a google sheet/google doc. It is meant to provide the high-level details of the model.
+The model card may be created as a github issue or a google sheet/google doc. It is meant to provide the high-level details of the model.
 ![create a model card](images/model_card.png)
 
 ### 2.3 Using the reference model in Torch
-  - If the model is publicly available, you may include a link to the reference model. Here is an example: [yolov4_reference_model](https://github.com/Tianxiaomo/pytorch-YOLOv4/blob/master/models.py)
+If the model is publicly available, you may include a link to the reference model. Here is an example: [yolov4_reference_model](https://github.com/Tianxiaomo/pytorch-YOLOv4/blob/master/models.py)
 
 ### 2.4 Create the torch model graph
-  - The next step is to generate the pytorch model graph. If you already have access to a torch reference model, you may generate it using the existing code. Otherwise, you will need to implement a torch model first as this will be used later on for comparison to the TTNN model outputs any ways. Here is an example: [yolov4_torch_graph](https://github.com/user-attachments/files/17112021/model_pytorch_yolov4.gv.pdf)
+The next step is to generate the pytorch model graph. If you already have access to a torch reference model, you may generate it using the existing code. Otherwise, you will need to implement a torch model first as this will be used later on for comparison to the TTNN model outputs any ways. Here is an example: [yolov4_torch_graph](https://github.com/user-attachments/files/17112021/model_pytorch_yolov4.gv.pdf)
 
 ### 2.5 Extract the model summary
-  - Generate a torch model summary in order to extract the arguments and parameters of each op in the torch implementation. Here is a reference code for generating the model summary: [yolov4_model_summary_generation_script](https://github.com/tenstorrent/tt-metal/blob/main/models/demos/yolov4/reference/yolov4_summary.py)
-  - Using the reference graph and model summary, document the modules and all torch ops required for the model implementation. For instance, in yolo-v4, there are 9 modules; Resblock, Downsample1 (DS1), DS2, DS3, DS4, DS5, Neck, Head and Yolov4. And, the following ops: Conv2d, Maxpool, concat, batch_norm, Mish, leakyRelu, upsample, add. The model summary will include the parameters of each op.
+Generate a torch model summary in order to extract the arguments and parameters of each op in the torch implementation. Here is a reference code for generating the model summary: [yolov4_model_summary_generation_script](https://github.com/tenstorrent/tt-metal/blob/main/models/demos/yolov4/reference/yolov4_summary.py)
+
+Using the reference graph and model summary, document the modules and all torch ops required for the model implementation. For instance, in yolo-v4, there are 9 modules; Resblock, Downsample1 (DS1), DS2, DS3, DS4, DS5, Neck, Head and Yolov4. And, the following ops: Conv2d, Maxpool, concat, batch_norm, Mish, leakyRelu, upsample, add. The model summary will include the parameters of each op.
 
 ### 2.6 Create issues for potential bugs or missing TTNN ops
-  - As you extract all torch ops using the torch graph and model summary in the previous step, you will need to create the equivalent TTNN unit tests per op in the next step. You may realize that some of the ops might not have a TTNN implementation yet. In such cases, you may file a github issue to request an implementation. Here is an example where convTranspose2D was not available. An issue was created and the op got implemented by Metalium team. [missing TTNN convTranspose2D github issue](https://github.com/tenstorrent/tt-metal/issues/6326)
+As you extract all torch ops using the torch graph and model summary in the previous step, you will need to create the equivalent TTNN unit tests per op in the next step. You may realize that some of the ops might not have a TTNN implementation yet. In such cases, you may file a github issue to request an implementation. Here is an example where convTranspose2D was not available. An issue was created and the op got implemented by Metalium team: [missing TTNN convTranspose2D github issue](https://github.com/tenstorrent/tt-metal/issues/6326)
 
 
 ## 3. End to end model in TTNN
-  - Once, you have created a model card and extracted all required details from a torch implementation of the model, you can use the following diagram that breaks down the steps to have a full model implementation in TTNN:
+Once, you have created a model card and extracted all required details from a torch implementation of the model, you can use the following diagram that breaks down the steps to have a full model implementation in TTNN:
 ![Model bring-up](images/model_bringup.png)
-  - In the following sections we will dive deep into each step.
 
-## 3.1 Create TTNN unit tests per module and per op
-  - It is highly recommended to start by creating TTNN unit tests per op in your model. Then move on to create pytests per module in your model. Here you can find examples of writing unit tests for the maxpool op: [unit tests for maxpool](https://github.com/tenstorrent/tt-metal/blob/main/tests/ttnn/unit_tests/operations/pool/test_maxpool2d.py)
-  - The unit tests per op will use [PCC](https://en.wikipedia.org/wiki/Pearson_correlation_coefficient) to ensure the TTNN op's output is an accurate match with that of torch.
-  - It will also enable the user to try different settings and TTNN knobs available for the op and analyze the performance of the op and optimize it when possible. The optimization and range of knobs available to the user per op is a more advanced topic. However, once you develop a good command of the over all bring up process, you may refer to the [yolov4_tech_report](https://github.com/tenstorrent/tt-metal/blob/main/tech_reports/YoloV4-TTNN/yolov4.md) to learn more. The existing unit tests such as the conv2d unit tests [here](https://github.com/tenstorrent/tt-metal/blob/main/tests/ttnn/unit_tests/operations/conv/test_conv2d.py) are also a great starting point. You may explore more unit tests for different ops under [operations unit tests](https://github.com/tenstorrent/tt-metal/tree/main/tests/ttnn/unit_tests/operations).
-  - Once you have unit tests for all the ops in a module of your model, for instance, all the ops in Downsample1 module of yolov4, you may proceed with the module bring up in TTNN. At this stage, all ops might be supported on TTNN and the unit tests may pass for all which would be great. However, it might happen that an op does not have a kernel implementation for TTNN yet or it might fail with the configurations you need. In such cases, you may proceed with creating detailed git hub issues to request support for those and fall back to torch for those ops unit the support is added in TTNN.
-  - Here is an example of the Downsample1 module implementation of YOLO-v4 in torch: [DS1 in torch](https://github.com/tenstorrent/tt-metal/blob/main/models/demos/yolov4/reference/downsample1.py). And the TTNN implementation of the same module is here: [DS1 in TTNN](https://github.com/tenstorrent/tt-metal/blob/main/models/demos/yolov4/tt/downsample1.py)
+In the following sections we will dive deep into each step.
+
+### 3.1 Create TTNN unit tests per module and per op
+It is highly recommended to start by creating TTNN unit tests per op in your model. Then move on to create pytests per module in your model. Here you can find examples of writing unit tests for the maxpool op: [unit tests for maxpool](https://github.com/tenstorrent/tt-metal/blob/main/tests/ttnn/unit_tests/operations/pool/test_maxpool2d.py). The unit tests per op will use [PCC](https://en.wikipedia.org/wiki/Pearson_correlation_coefficient) to ensure the TTNN op's output is an accurate match with that of torch.
+
+It will also enable the user to try different settings and TTNN knobs available for the op and analyze the performance of the op and optimize it when possible. The optimization and range of knobs available to the user per op is a more advanced topic. However, once you develop a good command of the over all bring up process, you may refer to the [yolov4_tech_report](https://github.com/tenstorrent/tt-metal/blob/main/tech_reports/YoloV4-TTNN/yolov4.md) to learn more. The existing unit tests such as the conv2d unit tests [here](https://github.com/tenstorrent/tt-metal/blob/main/tests/ttnn/unit_tests/operations/conv/test_conv2d.py) are also a great starting point. You may explore more unit tests for different ops under [operations unit tests](https://github.com/tenstorrent/tt-metal/tree/main/tests/ttnn/unit_tests/operations).
+
+Once you have unit tests for all the ops in a module of your model, for instance, all the ops in Downsample1 module of yolov4, you may proceed with the module bring up in TTNN. At this stage, all ops might be supported on TTNN and the unit tests may pass for all which would be great. However, it might happen that an op does not have a kernel implementation for TTNN yet or it might fail with the configurations you need. In such cases, you may proceed with creating detailed git hub issues to request support for those and fall back to torch for those ops unit the support is added in TTNN.
+
+Here is an example of the Downsample1 module implementation of YOLO-v4 in torch: [DS1 in torch](https://github.com/tenstorrent/tt-metal/blob/main/models/demos/yolov4/reference/downsample1.py). And the TTNN implementation of the same module is here: [DS1 in TTNN](https://github.com/tenstorrent/tt-metal/blob/main/models/demos/yolov4/tt/downsample1.py)
 The diagram below illustrates the corresponding Downsample1 module:
+
 ![Downsample1 Diagram](images/Downsample1_diagram.png)
 
-## 3.2 PCC
-  - Similar to individual ops unit tests, user is highly encouraged to check per module [PCC](https://en.wikipedia.org/wiki/Pearson_correlation_coefficient) to ensure the accuracy of per module output from the TTNN implementation. Here is an example of it in yolov4 implementation: [PCC assertion](https://github.com/tenstorrent/tt-metal/blob/main/models/demos/yolov4/tests/pcc/test_ttnn_yolov4.py#L69).
+### 3.2 PCC
+Similar to individual ops unit tests, user is highly encouraged to check per module [PCC](https://en.wikipedia.org/wiki/Pearson_correlation_coefficient) to ensure the accuracy of per module output from the TTNN implementation. Here is an example of it in yolov4 implementation: [PCC assertion](https://github.com/tenstorrent/tt-metal/blob/main/models/demos/yolov4/tests/pcc/test_ttnn_yolov4.py#L69).
 
 
-## 3.3 Optimization
-  - When writing TTNN models, there can be several levels of optimization. We can break them down into 3 stages. At the first stage, optimization can be achieved at per-op level. For instance, for a convolution op:
-  - STAGE 1:
-  - Based on the height, width and number of channels, you may decide the sharding strategy (height-sharding, width-sharding, or block-sharding). You may refer to the documentation on convolutions for more details here: [Conv sharding strategy](https://github.com/tenstorrent/tt-metal/blob/main/tech_reports/CNNs/ttcnn.md#sharding) [sharding strategy explained in yolov4-tech report](https://github.com/tenstorrent/tt-metal/blob/main/tech_reports/YoloV4-TTNN/yolov4.md#24-use-best-shardlayout-for-convolutio)
-  - At the op-level, you may also optimize by selecting the optimal data type such as bfloat8_b over bfloat_16 when possible. Here is another example of it in yolo-v4 tech report: [data-type optimization](https://github.com/tenstorrent/tt-metal/blob/main/tech_reports/YoloV4-TTNN/yolov4.md#23-data-type-optimization)
-  - At the op-level, another argument is the math_fidelity. Always set the math_fidelity=ttnn.MathFidelity.LoFi unless you observe noticeable drop in PCC.
-  - At the module-level, there are parameters to optimize based on your module graph. For instance, for the convolution op, you should set the deallocate_activation to True if you will not be using the input tensor to the conv anywhere else on the model graph. Please refer to the example here: [Yolo-v4 architecture](https://github.com/tenstorrent/tt-metal/blob/main/tech_reports/YoloV4-TTNN/yolov4.md#3-yolov4-architecture).
-  - At the module-level as well as the full-model-level, there are initial optimizations you may consider, for instance, when the module or the full model consists of consecutive ops, ideally there should be minimal changes in sharding strategy between ops. For instance, if the model starts with width-sharding op, it would be ideal to keep the same strategy for the following op, as reshards can be expensive. So it is recommended to find the best sharding strategies per op. However, once you have a module implementation, you may generate the perf sheet (this will be covered on a following section of this report) to analyze the device runtime of the full module/full model and identify where keeping the same sharding strategy could be beneficial looking at the end to end device time versus doing reshards between ops.
+### 3.3 Optimization per Op (Stage 1)
+When writing TTNN models, there can be several levels of optimization. We can break them down into 3 stages. At the first stage, optimization can be achieved at per-op level. Here is an example for the Convolution Op:
+
+- **Sharding Strategy**: Based on the height, width and number of channels, you may decide the sharding strategy (height-sharding, width-sharding, or block-sharding). You may refer to the documentation on convolutions for more details here: [Conv sharding strategy](https://github.com/tenstorrent/tt-metal/blob/main/tech_reports/CNNs/ttcnn.md#sharding) [sharding strategy explained in yolov4-tech report](https://github.com/tenstorrent/tt-metal/blob/main/tech_reports/YoloV4-TTNN/yolov4.md#24-use-best-shardlayout-for-convolutio)
+- **Data Type**: At the op-level, you may also optimize by selecting the optimal data type such as bfloat8_b over bfloat_16 when possible. Here is another example of it in yolo-v4 tech report: [data-type optimization](https://github.com/tenstorrent/tt-metal/blob/main/tech_reports/YoloV4-TTNN/yolov4.md#23-data-type-optimization)
+- **Math Fidelity**: At the op-level, another argument is the math_fidelity. Always set the math_fidelity=ttnn.MathFidelity.LoFi unless you observe noticeable drop in PCC.
+- **Parameters at module graph**: At the module-level, there are parameters to optimize based on your module graph. For instance, for the convolution op, you should set the deallocate_activation to True if you will not be using the input tensor to the conv anywhere else on the model graph. Please refer to the example here: [YOLOv4 Architecture](https://github.com/tenstorrent/tt-metal/blob/main/tech_reports/YoloV4-TTNN/yolov4.md#3-yolov4-architecture)
+- **Optimizations at full module/model**: At the module-level as well as the full-model-level, there are initial optimizations you may consider, for instance, when the module or the full model consists of consecutive ops, ideally there should be minimal changes in sharding strategy between ops. For instance, if the model starts with width-sharding op, it would be ideal to keep the same strategy for the following op, as re-shards can be expensive. So it is recommended to find the best sharding strategies per op. However, once you have a module implementation, you may generate the perf sheet (this will be covered on a following section of this report) to analyze the device runtime of the full module/full model and identify where keeping the same sharding strategy could be beneficial looking at the end to end device time versus doing re-shards between ops.
 
 ## 4. End to end model performance
-### 4.1 Performance Sheet
+### 4.1 Optimization with Performance Sheet (Stage 2)
 
-  - STAGE 2 of optimization:
-  - at this stage, we need to utilize several tools available to us. We will start by the perf_sheet. You will need to build metal with perf-analyzer enabled fist. Then follow the instructions to generate the perf sheet per your module or full model.
-  - Build the project:
-    ```
-    build_metal.sh
-    ```
-  - Once build with the command above to enable profiler, and once you have a pytest for your TTNN module or full model, you may follow the example bellow from the ResNet model replacing the path to the test_perf_resnet.py with the path to your implementation:
+At this stage, several tools can be used to analyze and improve performance. The first step is to generate a performance sheet (perf_sheet). To do this, you must build tt-metal with the performance analyzer enabled. Begin by building the project:
 
-    ```
-    ./tt_metal/tools/profiler/profile_this.py -n resnet -c "pytest models/demos/resnet/tests/test_perf_resnet.py::test_perf_bare_metal[20-0.0185-25]"'
-    ```
-  - Once you execute such command, a .csv perf sheet will appear in your execution path. You may open the file via excel for better utilities.
-  - You may refer to [TTNN profiler documentation](https://docs.tenstorrent.com/tt-metal/latest/ttnn/ttnn/profiling_ttnn_operations.html) for a more comprehensive overview of the profiler tool and the details of the generated perf sheet by it.
-  - [Perf Report Headers](https://docs.tenstorrent.com/tt-metal/latest/ttnn/ttnn/profiling_ttnn_operations.html#perf-report-headers) will be particularly helpful in understanding the content of the generated perf sheet.
-  - The first thing to check on the perf sheet would be to look at the device kernel duration reported in ns per op. By using excel tools, you can quickly identify the largest values in the column. Then see, which op they correspond to. Here are some examples:
-  - ![perf-sheet snippet](images/perf-sheet-sample1.png)
-  - Once you identify the op, it is recommended to check the number of cores used for the op among other configs/parameters. For instance for the shared snippet, you can see how the device kernel durations are high when ops are running on low number of cores. For the examples of a convolution op, you may increase the number of cores used by adjusting the sharding strategy (height, width or block sharding). See an example here in [yolov4 tech report](https://github.com/tenstorrent/tt-metal/blob/main/tech_reports/YoloV4-TTNN/yolov4.md#24-use-best-shardlayout-for-convolution)
-  - another factor to consider is per op utilization. One way to increase utilization would be to adjust the data-type. see an example here in [yolov4 tech report](https://github.com/tenstorrent/tt-metal/blob/main/tech_reports/YoloV4-TTNN/yolov4.md#data-type-optimization)
-  - The utilization percentage is calculated by - (PM ideal/device kernel duration) * (108/core_count)
-  - Another approach to improve utilization is by applying sharding techniques to eliminate the need for data movement inter-tensix-cores between the consecutive OPs. you may checkout the example here in [yolov4 tech report](https://github.com/tenstorrent/tt-metal/blob/main/tech_reports/YoloV4-TTNN/yolov4.md#21-sharding-on-all-relevant-ops)
+```
+build_metal.sh
+```
+
+Once building with profiling enabled, and once you have a pytest for your TTNN module or full model, you can generate the performance sheet by running a command similar to the following example for the ResNet model (replace the path with your own test):
+
+```
+./tt_metal/tools/profiler/profile_this.py -n resnet -c "pytest models/demos/resnet/tests/test_perf_resnet.py::test_perf_bare_metal[20-0.0185-25]"'
+```
+
+When the command completes, a .csv file containing the performance data will be generated in your working directory. It is recommended to open this file in Excel for easier analysis.
+
+For a detailed overview of the profiler tool and the structure of the generated report, refer to the [TTNN profiler documentation](https://docs.tenstorrent.com/tt-metal/latest/ttnn/ttnn/profiling_ttnn_operations.html). The section on [Perf Report Headers](https://docs.tenstorrent.com/tt-metal/latest/ttnn/ttnn/profiling_ttnn_operations.html#perf-report-headers) will be particularly useful for understanding the contents of the performance sheet.
+
+The first step in analyzing the report is to examine the **device kernel duration** (in ns) for each operation. By using Excel tools, identify the operations with the largest values and investigate which specific ops they correspond to. Here are some examples:
+
+![perf-sheet snippet](images/perf-sheet-sample1.png)
+
+Once you identify the bottleneck operation, it is recommended to check the number of cores used for the op among other configs/parameters. For instance for the shared snippet, you can see how the device kernel durations are high when ops are running on low number of cores. For the examples of a convolution op, you may increase the number of cores used by adjusting the sharding strategy (height, width or block sharding). See an example here in [YOLOv4 best shard-layout section](https://github.com/tenstorrent/tt-metal/blob/main/tech_reports/YoloV4-TTNN/yolov4.md#24-use-best-shardlayout-for-convolution).
+
+Another factor to consider is **per-operation utilization**. Utilization can be increased by optimizing data types. More details can be found in the [YOLOv4 data type optimization section](https://github.com/tenstorrent/tt-metal/blob/main/tech_reports/YoloV4-TTNN/yolov4.md#data-type-optimization).
+
+The utilization percentage can be calculated using the following formula:
+
+```
+Utilization (%) = (PM ideal / device kernel duration) * (108 / core count)
+```
+
+Finally, further improvements can be achieved by applying **sharding techniques** to eliminate the need for data movement inter-tensix-cores between the consecutive operations. You may checkout the example here in [YOLOv4 sharding section](https://github.com/tenstorrent/tt-metal/blob/main/tech_reports/YoloV4-TTNN/yolov4.md#21-sharding-on-all-relevant-ops).
 
 
 ### 4.2 Visualizer
@@ -147,16 +164,12 @@ The diagram below illustrates the corresponding Downsample1 module:
     python -m tracy -p -r -v -m pytest models/demos/yolov4/demo/demo.py
     ```
 
-
 Reports Folder (sample generated database file and folder structure)             |  Performance Data Folder (Sample generated performance ops information csv and folder structure)
 :-------------------------:|:-------------------------:
 ![](images/DB_Files.png)  |  ![](images/performance_ops_folder.png)
 
 - Visualizations and Information provided in operations, layers and performance are provided in the video: (it contains input, output buffer information, graph and performance of those ops) <br> <br>
 ![](https://github.com/user-attachments/assets/11511ead-e1fe-4a82-82c8-d7343ea5dcbd)
-
-
-
 
 
 ### 4.3 Trace and 2cq
@@ -178,4 +191,4 @@ Reports Folder (sample generated database file and folder structure)            
 
 ## 5. Conclusion
 
-  - This document walks you through a systematic approach to bringing up new models in TTNN library using existing implementations as examples. It aims at enabling you to ramp up quickly on an initial bring up phase and then guiding you though knobs and tools available for performance analysis and optimizations.
+This document walks you through a systematic approach to bringing up new models in TTNN library using existing implementations as examples. It aims at enabling you to ramp up quickly on an initial bring up phase and then guiding you though knobs and tools available for performance analysis and optimizations.
