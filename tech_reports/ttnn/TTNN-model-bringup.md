@@ -5,10 +5,9 @@
 
 
 - [New Model Bringup in TTNN](#new-model-bringup-in-ttnn)
-  - [Contents](#contents)
   - [1. Overview](#1-overview)
   - [2. New model bringup flow in TTNN](#2-new-model-bringup-flow-in-ttnn)
-    - [2.1 Recommended steps for model bringup](#21-recommented-steps-for-model-bringup)
+    - [2.1 Recommended steps for model bringup](#21-recommended-steps-for-model-bringup)
     - [2.2 Create a model Card](#22-create-a-model-card)
     - [2.3 Using the reference model in Torch](#23-using-the-reference-model-in-torch)
     - [2.4 Create the torch model graph](#24-create-the-torch-model-graph)
@@ -16,12 +15,12 @@
     - [2.6 Create issues for potential bugs or missing TTNN ops](#26-create-issues-for-potential-bugs-or-missing-ttnn-ops)
   - [3. End to end model in TTNN](#3-end-to-end-model-in-ttnn)
     - [3.1 Create TTNN unit tests per module and per op](#31-create-ttnn-unit-tests-per-module-and-per-op)
-    - [3.2 PCC](#32-pcc--)
-    - [3.3 Optimization](#34-optimization)
+    - [3.2 PCC](#32-pcc)
+    - [3.3 Optimization](#33-optimization)
   - [4. End to end model performance](#4-end-to-end-model-performance)
     - [4.1 Performance sheet](#41-performance-sheet)
-    - [4.2 Visualizer](#42-visualizer--)
-    - [4.3 Trace and 2cq](#44-trace-and-2cq)
+    - [4.2 Visualizer](#42-visualizer)
+    - [4.3 Trace and 2cq](#43-trace-and-2cq)
   - [5. Conclusion](#5-conclusion)
 
 
@@ -82,7 +81,7 @@ The diagram below illustrates the corresponding Downsample1 module:
   - At the module-level, there are parameters to optimize based on your module graph. For instance, for the convolution op, you should set the deallocate_activation to True if you will not be using the input tensor to the conv anywhere else on the model graph. Please refer to the example here: [Yolo-v4 architecture](https://github.com/tenstorrent/tt-metal/blob/main/tech_reports/YoloV4-TTNN/yolov4.md#3-yolov4-architecture).
   - At the module-level as well as the full-model-level, there are intial oprimizations you may consider, for instance, when the module or the full model consists of cosequtive ops, idally there should be minimal changes in sharding strategy between ops. For instance, if the model starts with width-sharding op, it would be ideal to keep the same strategy for the following op as reshards can be expensive. So it is recommended to find the best sharding strategies per op. However, once you have a module implementation, you may generate the perf sheet (this will be covered on a following section of this reort) to analyze the device run-time of the full module/full model and identify where keeping the same sharding strategy could be beneficial looking at the end to end device time versus doing reshareds between ops.
 
-## 4.  End to end model performance
+## 4. End to end model performance
 ### 4.1 Performance Sheet
 
   - STAGE 2 of optimization:
